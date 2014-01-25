@@ -7,19 +7,15 @@ const uint64_t pipes[2] = {0X0101010101LL, 0X0202020202LL};
 ComServer::ComServer():
     radio(9,10),
     size(0),
-    index(0),
-    status(ComServer::Begin),
     type(ComServer::TranssmitPacket),
     packet_index(0),
     buffer_index(0),
     send_ok(true)
 {
-    Serial.begin(57600);
-    printf_begin();
-    printf("\n\rRF24 server started/\n\r");
-    
-    radio.begin();
+    Serial.begin(115200);
+   
     //настройка параметров.
+    radio.begin();
     radio.setChannel(66);
     radio.setDataRate(RF24_2MBPS);
     radio.setAutoAck(true);
@@ -29,123 +25,111 @@ ComServer::ComServer():
     radio.openWritingPipe(pipes[0]);
     radio.openReadingPipe(1, pipes[1]);
     radio.startListening();
-
-    radio.printDetails();
 }
 
 void ComServer::run(void)
 {
     if ( Serial.available() )
     {
-        uint8_t ch = Serial.read();
-        
-        //анализ данных
-        switch (status)
+        //1. читаем тип
+        type = ComServer::CmdType(Serial.read());
+
+        if (type == 0xff)
+          return;
+       
+        while(!Serial.available()){}
+
+        //2. читаем размер данных.        
+        size = CmdType(Serial.read());
+
+        //передача данных
+        if (type == TranssmitPacket)
         {
-            case Begin:
+            packet_index = 0;
+            
+            //подготовка данных к передаче.
+            for(;;)
             {
-                size = ch;
-                status = GetCmdType;
-                index = 0;
-                packet_index = 0;
+                //1. создадим заголовок пекета.
                 buffer_index = 0;
-                send_ok = true;
-                break;
-            }
-            case GetCmdType:
-            {
-                type = CmdType(ch);
-                status = BuildData;
-
-                //завершение обработку, нет данных.
-                if (index + 1 == size)
-                    status = Begin;
-
-                size--;
-                break;
-            }
-            //Сборка пакета
-            case BuildData:
-            {
-                //Пакет на передачу.
-                if ( type == TranssmitPacket)
+                buffer[buffer_index] = packet_index;
+                buffer_index++;
+               
+                //первый пакет
+                if (packet_index == 0 )
                 {
-                    //игнорирование данных, т.к была потеря пакета.
-                    if ( send_ok )
-                    {
-                        //Добавим заголоков в буффер
-                        if (buffer_index == 0 )
-                        {
-                            //Добавим индекс пакета
-                            buffer[buffer_index] = packet_index;
-                            buffer_index++;
+                    buffer[buffer_index] = size;
+                    buffer_index++;
+                    radio.stopListening();
+                }
+  
+                //первый/паследний пакет.
+                if ( size + buffer_index <= 32 )
+                {
+                    size = size + buffer_index;
 
-                            //в первом пакете посылаем размер.
-                            if (packet_index == 0)
-                            {
-                                buffer[buffer_index] = size;
-                                buffer_index++;
-                            }
-                            packet_index++;
-                        }
-                        
-                        //add data to buffer
-                        buffer[buffer_index] = ch;
+                    while(buffer_index < size)
+                    {
+                        while(!Serial.available()){}
+                        buffer[buffer_index] = Serial.read();
                         buffer_index++;
-                        index++;
+                    }
 
-                        //Пакет пролезает в payload
-                        if (size <= 32 - 2)
-                        {
-                            //send packet
-                            if (index == size)
-                            {
-                                radio.stopListening();
-                                send_ok = radio.write(buffer, buffer_index);
-                                radio.startListening();
-                            }
-                        }
-                        //Посылка данных кусками
-                        else if (buffer_index == 32)
-                        {
-                            if (packet_index == 1)
-                                radio.stopListening();
-                            send_ok = radio.write(buffer, buffer_index);
-                            buffer_index = 0;
-                        }
-                        //Остаток.
-                        else if (index == size)
-                        {
-                            send_ok = radio.write(buffer, buffer_index);
-                            radio.startListening();
-                        }
-                    }
-                    else
-                    {
-                        index++;
-                    }
+                    //запись данных                    
+                    send_ok = radio.write(buffer, buffer_index);
+                    radio.startListening();
+
+                    break;
                 }
-                //Делаем ехо в ком порт.
-                else if ( type == Echo )
-                {
-                    Serial.write(ch);
-                    index++;
-                }
+                //промежуточный пакет
                 else
                 {
-                    index++;                
-                }
+                    while(buffer_index < 31)
+                    {
+                        while(!Serial.available()){}
+                        buffer[buffer_index] = Serial.read();
+                        buffer_index++;
+                    }
+                    size = size - 31;
+                    send_ok = radio.write(buffer, buffer_index);
 
-                //завершение приёма
-                if (index == size)
-                {
-                    if (send_ok)
-                        printf("s:%i ok\r\n", size);
-                    else
-                        printf("s:%i failed\r\n", size);
-                    status = Begin;
+                    //прекратим передачу пакетов.
+                    if (!send_ok)
+                        break;
                 }
-                break;
+                
+                //увеличим номер пакета.
+                packet_index++;
+            }
+            
+            if (!send_ok)
+            {
+              //очистим буффер если передача прервана.
+              while (size)
+                {
+                    while(!Serial.available()){}
+                    Serial.read();
+                    size--;
+                }
+            }
+            
+
+            //запись резульата.
+            Serial.write(type);
+            Serial.write(1);
+            Serial.write(uint8_t(send_ok));
+        }
+        //Делаем ехо в ком порт.
+        else if ( type == Echo )
+        {
+            Serial.write(type);
+            Serial.write(size);
+            
+            while(size)
+            {
+                while(!Serial.available()){}
+                Serial.write(Serial.read());
+                size--;
             }
         }
     }
