@@ -10,7 +10,7 @@ public:
     ComServer();
     void run(void);
 private:
-    enum Status{Begin, GetCmdType, BuildData};
+    enum Status{GetType, GetSize, BuildData};
     enum CmdType{TranssmitPacket, Echo};
 
     RF24 radio;

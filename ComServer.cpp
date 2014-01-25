@@ -8,15 +8,15 @@ ComServer::ComServer():
     radio(9,10),
     size(0),
     index(0),
-    status(ComServer::Begin),
+    status(ComServer::GetType),
     type(ComServer::TranssmitPacket),
     packet_index(0),
     buffer_index(0),
     send_ok(true)
 {
-    Serial.begin(57600);
-    printf_begin();
-    printf("\n\rRF24 server started/\n\r");
+    Serial.begin(115200);
+    //printf_begin();
+    //printf("\n\rRF24 server started/\n\r");
     
     radio.begin();
     //настройка параметров.
@@ -29,46 +29,26 @@ ComServer::ComServer():
     radio.openWritingPipe(pipes[0]);
     radio.openReadingPipe(1, pipes[1]);
     radio.startListening();
-
-    radio.printDetails();
+    //radio.printDetails();
 }
 
 void ComServer::run(void)
 {
-    if ( Serial.available() )
+    uint8_t available;
+
+    if ( available = Serial.available() )
     {
-        uint8_t ch = Serial.read();
-        
-        //анализ данных
-        switch (status)
+        while (available)
         {
-            case Begin:
-            {
-                size = ch;
-                status = GetCmdType;
-                index = 0;
-                packet_index = 0;
-                buffer_index = 0;
-                send_ok = true;
-                break;
-            }
-            case GetCmdType:
-            {
-                type = CmdType(ch);
-                status = BuildData;
+            available--;
+            uint8_t ch = Serial.read();
 
-                //завершение обработку, нет данных.
-                if (index + 1 == size)
-                    status = Begin;
-
-                size--;
-                break;
-            }
+            //анализ данных
             //Сборка пакета
-            case BuildData:
+            if ( status == BuildData )
             {
                 //Пакет на передачу.
-                if ( type == TranssmitPacket)
+                if ( type == TranssmitPacket )
                 {
                     //игнорирование данных, т.к была потеря пакета.
                     if ( send_ok )
@@ -128,6 +108,13 @@ void ComServer::run(void)
                 //Делаем ехо в ком порт.
                 else if ( type == Echo )
                 {
+                    //отправим заголовок.
+                    if ( index == 0 )
+                    {
+                        Serial.write(uint8_t(type));
+                        Serial.write(size);
+                    }
+
                     Serial.write(ch);
                     index++;
                 }
@@ -139,13 +126,36 @@ void ComServer::run(void)
                 //завершение приёма
                 if (index == size)
                 {
-                    if (send_ok)
-                        printf("s:%i ok\r\n", size);
-                    else
-                        printf("s:%i failed\r\n", size);
-                    status = Begin;
+                    status = GetType;
+
+                    if ( type == TranssmitPacket )
+                    {
+                        //вернём результат.
+                        Serial.write(uint8_t(type));
+                        Serial.write(1);
+                        Serial.write(uint8_t(send_ok));
+                    }
                 }
-                break;
+            }
+            else if ( status == GetType )
+            {
+                type = CmdType(ch);
+                status = GetSize;
+            }
+            else if ( status == GetSize )
+            {
+                size = ch;
+                status = BuildData;
+
+                //завершение обработку, нет данных.
+                if (!size)
+                    status = GetType;
+
+                //инициализация данных
+                index = 0;
+                packet_index = 0;
+                buffer_index = 0;
+                send_ok = true;
             }
         }
     }
