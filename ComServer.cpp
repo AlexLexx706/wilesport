@@ -45,8 +45,17 @@ void ComServer::run(void)
         //передача данных
         if (type == TranssmitPacket)
         {
+            //читаем все данные из ком порта.
+            for (uint8_t i = 0; i < size; i++ )
+            {
+                while(!Serial.available()){}
+                temp_buffer[i] = Serial.read();
+            }
+
+            temp_buffer_index = 0;
             packet_index = 0;
-            
+            send_ok = true;
+           
             //подготовка данных к передаче.
             for(;;)
             {
@@ -70,8 +79,8 @@ void ComServer::run(void)
 
                     while(buffer_index < size)
                     {
-                        while(!Serial.available()){}
-                        buffer[buffer_index] = Serial.read();
+                        buffer[buffer_index] = temp_buffer[temp_buffer_index];
+                        temp_buffer_index++;
                         buffer_index++;
                     }
 
@@ -86,8 +95,8 @@ void ComServer::run(void)
                 {
                     while(buffer_index < 31)
                     {
-                        while(!Serial.available()){}
-                        buffer[buffer_index] = Serial.read();
+                        buffer[buffer_index] = temp_buffer[temp_buffer_index];
+                        temp_buffer_index++;
                         buffer_index++;
                     }
                     size = size - 31;
@@ -101,18 +110,6 @@ void ComServer::run(void)
                 //увеличим номер пакета.
                 packet_index++;
             }
-            
-            if (!send_ok)
-            {
-              //очистим буффер если передача прервана.
-              while (size)
-                {
-                    while(!Serial.available()){}
-                    Serial.read();
-                    size--;
-                }
-            }
-            
 
             //запись резульата.
             Serial.write(type);

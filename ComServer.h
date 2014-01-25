@@ -20,6 +20,8 @@ private:
     uint8_t packet_index;
     uint8_t avalable_bytes;
     bool send_ok;
+    uint8_t temp_buffer[0xff];
+    uint8_t temp_buffer_index;
 
 };
 
