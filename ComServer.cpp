@@ -86,8 +86,6 @@ void ComServer::run(void)
 
                     //запись данных                    
                     send_ok = radio.write(buffer, buffer_index);
-                    radio.startListening();
-
                     break;
                 }
                 //промежуточный пакет
@@ -110,6 +108,7 @@ void ComServer::run(void)
                 //увеличим номер пакета.
                 packet_index++;
             }
+            radio.startListening();
 
             //запись резульата.
             Serial.write(type);

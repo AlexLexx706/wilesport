@@ -42,7 +42,7 @@ if __name__ == '__main__':
     start_time = time.time()
     common_size = 0
     errors_count = 0
-    data = "1"*20
+    data = "1"*255
     
 
     while(1):
