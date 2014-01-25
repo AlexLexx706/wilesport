@@ -1,5 +1,4 @@
 #include "ComServer.h"
-#include <SPI.h>
 #include "nRF24L01.h"
 #include "printf.h"
 
