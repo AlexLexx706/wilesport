@@ -48,6 +48,7 @@ if __name__ == '__main__':
     while(1):
         res = p.send_data(data)
         print res
+        #time.sleep(1111111)
         
         if res:
             common_size = common_size + len(data)

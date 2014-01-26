@@ -25,6 +25,7 @@ ComServer::ComServer():
     radio.openWritingPipe(pipes[0]);
     radio.openReadingPipe(1, pipes[1]);
     radio.startListening();
+    radio.enableDynamicPayloads();
 }
 
 void ComServer::run(void)
@@ -91,13 +92,14 @@ void ComServer::run(void)
                 //промежуточный пакет
                 else
                 {
-                    while(buffer_index < 31)
+                    size = size - (32 - buffer_index);
+
+                    while(buffer_index < 32)
                     {
                         buffer[buffer_index] = temp_buffer[temp_buffer_index];
                         temp_buffer_index++;
                         buffer_index++;
                     }
-                    size = size - 31;
                     send_ok = radio.write(buffer, buffer_index);
 
                     //прекратим передачу пакетов.
